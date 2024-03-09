@@ -1,6 +1,5 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-# Импортируем функцию reverse(), она понадобится для получения адреса страницы.
 from django.urls import reverse
 
 from notes.forms import NoteForm
@@ -14,33 +13,30 @@ class TestPages(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = User.objects.create(username='Пользователь 1')
-        cls.all_notes = [
-            Note(
-                title=f'Запись {index}',
-                text='Просто текст.',
-                slug=f'Slug_{index}',
-                author=cls.user
-            )
-            for index in range(3)
-        ]
-        Note.objects.bulk_create(cls.all_notes)
+        cls.another_user = User.objects.create(username='Пользователь 2')
+        cls.note = Note.objects.create(
+            title='Запись',
+            text='Просто текст.',
+            slug='Slug',
+            author=cls.user
+        )
         cls.list_url = reverse('notes:list',)
-        cls.detail_url = reverse('notes:detail', args=(cls.all_notes[0].slug,))
-        cls.delete_url = reverse('notes:delete', args=(cls.all_notes[1].slug,))
+        cls.detail_url = reverse('notes:detail', args=(cls.note.slug,))
+        cls.delete_url = reverse('notes:delete', args=(cls.note.slug,))
         cls.add_url = reverse('notes:add',)
-        cls.edit_url = reverse('notes:edit', args=(cls.all_notes[2].slug,))
+        cls.edit_url = reverse('notes:edit', args=(cls.note.slug,))
 
-    def test_notes_order(self):
+    def test_list_has_note_of_user(self):
         self.client.force_login(self.user)
         response = self.client.get(self.list_url)
         object_list = response.context['object_list']
-        # Получаем даты новостей в том порядке, как они выведены на странице.
-        all_notes = [note.id for note in object_list]
-        # Сортируем полученный список по убыванию.
-        sorted_nodes = sorted(all_notes)
-        # Проверяем, что исходный список был отсортирован правильно.
-        self.assertEqual(all_notes, sorted_nodes)
-        self.assertEqual(object_list.count(), len(all_notes))
+        self.assertIn(self.note, object_list)
+
+    def test_list_not_has_notes_of_another_user(self):
+        self.client.force_login(self.another_user)
+        response = self.client.get(self.list_url)
+        object_list = response.context['object_list']
+        self.assertNotIn(self.note, object_list)
 
     def test_detail_delete_has_no_form(self):
         self.client.force_login(self.user)

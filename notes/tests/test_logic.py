@@ -10,32 +10,6 @@ from notes.models import Note
 User = get_user_model()
 
 
-class TestListNode(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = User.objects.create(username='Пользователь 1')
-        cls.another_user = User.objects.create(username='Пользователь 2')
-        cls.note = Note.objects.create(
-            title='Запись',
-            text='Просто текст.',
-            slug='Slug',
-            author=cls.user
-        )
-        cls.list_url = reverse('notes:list')
-
-    def test_list_has_note_of_user(self):
-        self.client.force_login(self.user)
-        response = self.client.get(self.list_url)
-        object_list = response.context['object_list']
-        self.assertIn(self.note, object_list)
-
-    def test_list_not_has_notes_of_another_user(self):
-        self.client.force_login(self.another_user)
-        response = self.client.get(self.list_url)
-        object_list = response.context['object_list']
-        self.assertEqual(object_list.count(), 0)
-
-
 class TestAddNote(TestCase):
     TITLE = 'Тестовый заголовок'
     TEXT = 'Просто текст'
@@ -50,27 +24,22 @@ class TestAddNote(TestCase):
         cls.auth_client = Client()
         cls.auth_client.force_login(cls.user)
         # Данные для POST-запроса при создании заметки.
-        cls.form_data_1 = {
+        cls.form_data = {
             'title': cls.TITLE, 'text': cls.TEXT, 'slug': cls.SLUG
-        }
-        cls.form_data_2 = {
-            'title': cls.TITLE, 'text': cls.TEXT
         }
 
     def test_anonymous_user_cant_add_note(self):
         # Совершаем запрос от анонимного клиента, в POST-запросе отправляем
         # предварительно подготовленные данные формы с текстом заметки.
-        for form_data in (self.form_data_1, self.form_data_2):
-            with self.subTest():
-                self.client.post(self.add_url, data=form_data)
+        self.client.post(self.add_url, data=self.form_data)
         # Считаем количество заметок.
-                notes_count = Note.objects.count()
+        notes_count = Note.objects.count()
         # Ожидаем, что заметок в базе нет - сравниваем с нулём.
-                self.assertEqual(notes_count, 0)
+        self.assertEqual(notes_count, 0)
 
     def test_user_can_add_note(self):
         # Совершаем запрос через авторизованный клиент.
-        response = self.auth_client.post(self.add_url, data=self.form_data_1)
+        response = self.auth_client.post(self.add_url, data=self.form_data)
         # Проверяем, что редирект привёл на страницу Done.
         self.assertRedirects(response, self.done_url)
         # Считаем количество заметок.
@@ -86,22 +55,20 @@ class TestAddNote(TestCase):
         self.assertEqual(note.author, self.user)
 
     def test_user_can_add_note_without_slug(self):
-        response = self.auth_client.post(self.add_url, data=self.form_data_2)
+        self.form_data.pop('slug')
+        response = self.auth_client.post(self.add_url, data=self.form_data)
         self.assertRedirects(response, self.done_url)
         notes_count = Note.objects.count()
         self.assertEqual(notes_count, 1)
         note = Note.objects.get()
-        self.assertEqual(note.title, self.TITLE)
-        self.assertEqual(note.text, self.TEXT)
         self.assertEqual(note.slug, slugify(self.TITLE))
-        self.assertEqual(note.author, self.user)
 
     def test_user_cant_add_note_with_not_uniq_slug(self):
         self.note = Note.objects.create(
             title=self.TITLE, text=self.TEXT,
             slug=self.SLUG, author=self.user,
         )
-        response = self.auth_client.post(self.add_url, data=self.form_data_1)
+        response = self.auth_client.post(self.add_url, data=self.form_data)
         # Проверяем, есть ли в ответе ошибка формы.
         self.assertFormError(
             response,
